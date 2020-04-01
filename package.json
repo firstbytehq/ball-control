@@ -10,8 +10,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "matter-js": "^0.14.2",
     "react": "16.9.0",
-    "react-native": "0.61.5"
+    "react-native": "0.61.5",
+    "react-native-game-engine": "^1.1.1",
+    "react-native-sensors": "^5.4.1"
   },
   "devDependencies": {
     "@babel/core": "^7.7.7",

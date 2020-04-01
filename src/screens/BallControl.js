@@ -1,95 +1,161 @@
-import React, {useState} from 'react';
+import React, {Component} from 'react';
+import {StyleSheet, Dimensions } from 'react-native';
+import {
+  accelerometer,
+  setUpdateIntervalForType,
+  SensorTypes,
+} from 'react-native-sensors';
 
-import {View, Button, StyleSheet} from 'react-native';
+import {GameEngine} from 'react-native-game-engine';
+import Matter from 'matter-js';
 
-const ballContainerWidth = 370; //Initialize container width and ball width
-const ballDiameter = 20;
+import Circle from '../components/Circle';
 
-const BallControl = () => {
-  const [ballPosition, setBallPosition] = useState({x: 0, y: 0}); // Initialize ball position with co-ordinates(x,y) i.e(0,0)
+const {height, width} = Dimensions.get('window');
 
-  let N = 10; //pixel range value for ball position change
-  let ballXCoordinate = ballPosition.x;
-  let ballYCoordinate = ballPosition.y;
+const BALL_SIZE = 20;
 
-  const ballPositionStyles = {
-    top: ballYCoordinate,
-    left: ballXCoordinate,
-  };
+const mid_point = width / 2 - BALL_SIZE / 2;
 
-  // to set horizontal boundary
-
-  // control ball right movement
-  const ballMoveToRight = () => {
-    setBallPosition({
-      x:
-        ballXCoordinate + N <= ballContainerWidth - ballDiameter
-          ? ballXCoordinate + N
-          : ballXCoordinate,
-      y: ballYCoordinate,
-    });
-  };
-  // control ball left movement
-  const ballMoveToLeft = () => {
-    setBallPosition({
-      x: ballXCoordinate - N >= 0 ? ballXCoordinate - N : ballXCoordinate,
-      y: ballYCoordinate,
-    });
-  };
-
-  // to set vertical boundary
-
-  // control ball top movement
-  const ballMoveToTop = () => {
-    setBallPosition({
-      x: ballXCoordinate,
-      y: ballYCoordinate - N >= 0 ? ballYCoordinate - N : ballYCoordinate,
-    });
-  };
-  // control ball bottom movement
-  const ballMoveToBottom = () => {
-    setBallPosition({
-      x: ballXCoordinate,
-      y:
-        ballYCoordinate + N <= ballContainerWidth - ballDiameter
-          ? ballYCoordinate + N
-          : ballYCoordinate,
-    });
-  };
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.ballContainer}>
-        <View style={[styles.ball, ballPositionStyles]} />
-      </View>
-      <Button onPress={() => ballMoveToRight()} title="right" />
-      <Button onPress={() => ballMoveToLeft()} title="left" />
-      <Button onPress={() => ballMoveToTop()} title="top" />
-      <Button onPress={() => ballMoveToBottom()} title="bottom" />
-    </View>
-  );
+const ballSettings = {
+  isStatic: true,
 };
+
+const ball = Matter.Bodies.circle(0, 0, BALL_SIZE, {
+  ...ballSettings,
+  label: 'ball',
+});
+
+const floor = Matter.Bodies.rectangle(width / 2, height, width, 10, {
+  isStatic: true,
+  isSensor: true,
+  label: 'floor',
+});
+
+setUpdateIntervalForType(SensorTypes.accelerometer, 30); //15
+
+export default class App extends Component {
+  state = {
+    x: 0,
+    y: 0,
+    isGameReady: false,
+  };
+
+  constructor(props) {
+    super(props);
+
+    const {engine, world} = this.addObjectsToWorld(ball);
+    this.entities = this.getEntities(engine, world, ball);
+
+    this.physics = (entities, {time}) => {
+      let engine = entities.physics.engine;
+      engine.world.gravity.y = 10; //0.5
+      Matter.Engine.update(engine, time.delta);
+      return entities;
+    };
+  }
+
+  componentDidMount() {
+    accelerometer.subscribe(({x, y}) => {
+      Matter.Body.setPosition(ball, {
+        x: this.state.x + x,
+        y: this.state.y + y,
+      });
+
+      this.setState(
+        state => ({
+          x: x + state.x,
+          y: y + state.y,
+        }),
+        () => {
+          if (
+            this.state.x < 0 ||
+            this.state.x > width ||
+            this.state.y < 0 ||
+            this.state.y > height
+          ) {
+            Matter.Body.setPosition(ball, {
+              x: mid_point,
+              y: mid_point,
+            });
+
+            this.setState({
+              x: mid_point,
+              y: mid_point,
+            });
+          }
+        },
+      );
+    });
+
+    this.setState({
+      isGameReady: true,
+    });
+  }
+
+  // componentWillUnmount() {
+  //   accelerometer.stop();
+  // }
+
+  addObjectsToWorld = ball => {
+    const engine = Matter.Engine.create({enableSleeping: false});
+    const world = engine.world;
+
+    let objects = [ball, floor];
+
+    Matter.World.add(world, objects);
+
+    return {
+      engine,
+      world,
+    };
+  };
+
+  getEntities = (engine, world, ball) => {
+    const entities = {
+      physics: {
+        engine,
+        world,
+      },
+
+      playerBall: {
+        body: ball,
+        size: [BALL_SIZE, BALL_SIZE],
+        renderer: Circle,
+      },
+    };
+
+    return entities;
+  };
+
+  render() {
+    const {isGameReady} = this.state;
+
+    if (isGameReady) {
+      return (
+        <GameEngine
+          style={styles.container}
+          systems={[this.physics]}
+          entities={this.entities}
+        />
+      );
+    }
+
+    return null;
+  }
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 10,
+    backgroundColor: '#F5FCFF',
   },
-  ballContainer: {
-    height: ballContainerWidth,
-    width: ballContainerWidth,
-    borderWidth: 1,
-    marginBottom: 10,
+  header: {
+    padding: 20,
+    alignItems: 'center',
   },
-  ball: {
-    height: 20,
-    width: ballDiameter,
-    borderWidth: 1,
-    borderRadius: 10,
-    position: 'absolute',
-    top: 0,
-    left: 0,
+  scoreText: {
+    fontSize: 25,
+    fontWeight: 'bold',
   },
 });
-
-export default BallControl;
